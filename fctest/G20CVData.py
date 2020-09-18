@@ -1,4 +1,4 @@
-from CVData import CVData
+from .__CVData__ import CVData
 import pandas as pd
 import os
 
