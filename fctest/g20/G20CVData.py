@@ -1,6 +1,7 @@
-from .__CVData__ import CVData
+#from .__CVData__ import CVData
 import pandas as pd
 import os
+from fctest.__CVData__ import CVData
 
 class G20CVData(CVData):
     

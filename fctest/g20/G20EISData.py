@@ -1,4 +1,4 @@
-from EISData import EISData
+from fctest.__EISData__ import EISData
 import pandas as pd
 import os
 

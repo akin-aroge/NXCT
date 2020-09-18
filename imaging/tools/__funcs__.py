@@ -108,11 +108,11 @@ def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,plot
         deltaE[:,:-1] = np.diff(imgout,axis=1)
 
         if 0<sigma:
-            deltaSf=flt.gaussian_filter(deltaS,sigma);
-            deltaEf=flt.gaussian_filter(deltaE,sigma);
+            deltaSf=flt.gaussian_filter(deltaS,sigma)
+            deltaEf=flt.gaussian_filter(deltaE,sigma)
         else: 
-            deltaSf=deltaS;
-            deltaEf=deltaE;
+            deltaSf=deltaS
+            deltaEf=deltaE
 
         # conduction gradients (only need to compute one per dim!)
         if option == 1:

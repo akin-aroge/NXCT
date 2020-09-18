@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as pyplot
 import os
-from .__PolCurve__ import PolCurve
+from fctest.__PolCurve__ import PolCurve
 
 class G20PolCurve(PolCurve):
 
