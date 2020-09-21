@@ -11,6 +11,11 @@ import warnings
 
 from sklearn.mixture import GaussianMixture as GM
 
+from scipy import interpolate, ndimage
+from tqdm import tqdm
+
+import skimage.measure as measure
+
 
 def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,ploton=False):
     """
@@ -70,6 +75,9 @@ def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,plot
 
     # ...you could always diffuse each color channel independently if you
     # really want
+
+    print("performing 2D anisotropic filtering...")
+
     if img.ndim == 3:
         warnings.warn("Only grayscale images allowed, converting to 2D matrix")
         img = img.mean(2)
@@ -101,7 +109,7 @@ def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,plot
 
         fig.canvas.draw()
 
-    for ii in np.arange(1,niter):
+    for ii in tqdm(np.arange(1,niter)):
 
         # calculate the diffs
         deltaS[:-1,: ] = np.diff(imgout,axis=0)
@@ -145,7 +153,7 @@ def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,plot
 
     return imgout
 
-def anisodiff3(stack,niter=1,kappa=50,gamma=0.1,step=(1.,1.,1.),option=1,ploton=False):
+def anisodiff3(stack,niter=1,kappa=50,gamma=0.1,step=(1.,1.,1.), sigma=0, option=1,ploton=False):
     """
     3D Anisotropic diffusion.
 
@@ -204,6 +212,9 @@ def anisodiff3(stack,niter=1,kappa=50,gamma=0.1,step=(1.,1.,1.),option=1,ploton=
 
     # ...you could always diffuse each color channel independently if you
     # really want
+
+    print("performing 3D anisotropic filtering...")
+
     if stack.ndim == 4:
         warnings.warn("Only grayscale stacks allowed, converting to 3D matrix")
         stack = stack.mean(3)
@@ -240,13 +251,21 @@ def anisodiff3(stack,niter=1,kappa=50,gamma=0.1,step=(1.,1.,1.),option=1,ploton=
 
         fig.canvas.draw()
 
-    for ii in np.arange(1,niter):
+    for ii in tqdm(np.arange(1,niter)):
 
         # calculate the diffs
         deltaD[:-1,: ,:  ] = np.diff(stackout,axis=0)
         deltaS[:  ,:-1,: ] = np.diff(stackout,axis=1)
         deltaE[:  ,: ,:-1] = np.diff(stackout,axis=2)
 
+        if 0<sigma:
+            deltaDf=flt.gaussian_filter(deltaD,sigma)
+            deltaSf=flt.gaussian_filter(deltaS,sigma)
+            deltaEf=flt.gaussian_filter(deltaE,sigma)
+        else:
+            deltaDf=deltaD 
+            deltaSf=deltaS
+            deltaEf=deltaE
         # conduction gradients (only need to compute one per dim!)
         if option == 1:
             gD = np.exp(-(deltaD/kappa)**2.)/step[0]
@@ -283,14 +302,14 @@ def anisodiff3(stack,niter=1,kappa=50,gamma=0.1,step=(1.,1.,1.),option=1,ploton=
 
     return stackout
 
-def calc_slc_by_slc(im, phase='white', ax='z'):
+def calc_slc_by_slc(im, phase_val=1, ax='z', frac=True):
     """
         This method will calculate various simple measures from a segmented image 
         that simply involve finding and average or finding a sum of all background or
         foreground piictures depending on phase
 
         @params:
-        im: image in the through plane direction
+        im: 3D image in the through plane direction
         phase: specifies the axis of computation. e.g ax=0 means through plance xtics
         ax: this is considered with reference to mea placement
             0 - left to right; 1 - top to bottom; 2 - through plane; 
@@ -303,31 +322,32 @@ def calc_slc_by_slc(im, phase='white', ax='z'):
     if len(dim) == 2:
         im = im.reshape(-1, dim[0], dim[1])
 
-    if phase == 'black':
-        im_ = np.where(im == 0, 1, 0)
-    else:
-        im_ = np.where(im == 255, 1, 0)
+    # if phase == 'black':
+    #     im_ = np.where(im == 0, 1, 0)
+    # else:
+    #     im_ = np.where(im == 255, 1, 0)
 
-    planar_result = np.mean(im_, axis=1).mean(axis=1)
-    #planar_result_2d = np.mean(im_, axis=0)
-
-    top_down = np.mean(im_, axis=0).mean(axis=1)
-    #top_down_2d = np.mean(im_, axis=1);
-
-    left_right = np.mean(im_, axis=0).mean(axis=0)
-    #left_right_2d = np.mean(im_, axis=2)
+    im_ = np.where(im == phase_val, 1, 0)
 
 
     if ax == 'z':
-        return planar_result #, planar_result_2d
+        result = np.mean(im_, axis=1).mean(axis=1)
 
     elif ax == 'y':
-        return top_down #, top_down_2d
+        result = np.mean(im_, axis=0).mean(axis=1)
+
 
     elif ax == 'x':
-        return left_right #, left_right_2d
+        result = np.mean(im_, axis=0).mean(axis=0)
+
+
     elif ax == 'whole':
-        return np.mean(im_)
+        result =  np.mean(im_)
+
+    if ~frac:
+        result = frac * (dim[0] * dim[1])
+
+    return result
     
     
 def getWaterVol(im, phase='white', ax='z', fraction=True):
@@ -423,3 +443,102 @@ def gauss_fit1D(data, n_comp=1, comps=[''], bins=50, n_sample=100, title='', ran
     ax.legend()
 
     return fig, ax, mus, stds, ws
+
+def get_cl_boundary(im, layer_to_keep='top'):
+    """ im: segmented catalyst outline image"""
+    
+    #cl_outline_im = tifffile.imread(os.path.join(cl_outline_im_path))
+    dim = im.shape
+    
+    # check what layer of the outline to keep, since cathode is at bottom, 
+    # you want to keep the top layer
+    if layer_to_keep == "bottom":
+        
+        #np.argmax returns the index of the first max which is the first 1
+        bndry_slc = dim[0] - 1 -  np.argmax(im[::-1], axis=0)  #matrix
+        bndry_slc = np.where(bndry_slc == dim[0] - 1, 0, bndry_slc)
+        
+    elif layer_to_keep == "top":
+        bndry_slc = np.argmax(im, axis=0)
+        
+    # bndry_slc is a matrix with non zero items which represents the 
+    # border point for the particular location e.g if (x, y) = 100 -> the 
+    # border point for loc (x,y)  occurs on slice 100
+
+    row, col = np.where(bndry_slc > 0)
+    z = bndry_slc[row, col]
+    
+    
+    # interp_smooth is 2D array where value of point (x, y) is the 
+    # boundary slice number. This is also smoothened with filter        
+    interp_im = np.zeros(dim, dtype=np.uint8)
+    ny = np.arange(0, dim[1])
+    nx = np.arange(0, dim[2])
+    
+    [xx,yy] = np.meshgrid(nx,ny) #grid to fit interpolation values
+    
+    interp = interpolate.griddata((col, row), z, (xx, yy), method='nearest')
+    interp_smooth = ndimage.uniform_filter(interp, size=10)
+    
+    # return all to image
+    interp_im[interp_smooth, yy, xx] = 255
+    
+    return interp_im
+
+
+def fill_boundary(im, side_to_keep='top'):
+    
+    # filling up the relevat boundaries. For the setup, the cathode is up and the
+    # anode is down. The filling strategy is to fill from slice 0 to top of cathode_cl
+    # for cathode gdl and from last slice to bottom anode CL
+
+
+    # create empty image, fill each slice with slice number and subtract interp-smooth.
+    # Essentially: since interp_smooth holds the boundary slice number for each point x,y
+    # we subtract it from each of the slices (which we fill with slice number) and if -ve
+    # it implies it is below it, and if +ve it means the point is above it
+    
+    #im = tifffile.imread(os.path.join(cl_outline_im_path))
+    dim = im.shape
+    
+    # check what layer of the outline to keep, since cathode is at bottom, 
+    # you want to keep the top layer
+
+    bndry_slc = np.argmax(im, axis=0)
+        
+    # bndry_slc is a matrix with non zero items which represents the 
+    # border point for the particular location e.g if (x, y) = 100 -> the 
+    # border point for loc (x,y)  occurs on slice 100
+
+
+
+    gdl_mask = np.zeros(dim, dtype=np.uint8) 
+    decision_im = gdl_mask \
+                    + np.arange(dim[0]).reshape(-1, 1, 1) \
+                    - bndry_slc
+
+    if side_to_keep == 'top':
+        mz, mrow, mcol = np.where(decision_im < 0)  # select point before boundary
+    elif side_to_keep == 'bottom':
+        mz, mrow, mcol = np.where(decision_im > 0)  # select points below boundary
+        
+    gdl_mask[mz, mrow, mcol] = 255
+    
+    return gdl_mask   
+
+def filter_particle_area(label, thresh):
+    """ 
+    return: f_label - particle_size filtered image according to thresh and each pixel now has the component size
+    """
+    f_label = label.copy()
+    
+    ms = measure.regionprops(label)
+
+    for region in ms:
+        if region.area < thresh:
+            f_label[f_label == region.label ] = 0
+        else:
+            f_label[f_label == region.label] = region.area
+    
+        
+    return f_label
