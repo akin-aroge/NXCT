@@ -4,7 +4,7 @@ import matplotlib.pyplot as pyplot
 import os
 from fctest.__PolCurve__ import PolCurve
 
-class G20PolCurve(PolCurve):
+class nG20PolCurve(PolCurve):
 
     # mea_active_area = 0.21
 
