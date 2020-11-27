@@ -6,3 +6,6 @@ from .__funcs__ import gauss_fit1D
 from .__funcs__ import get_cl_boundary
 from .__funcs__ import fill_boundary
 from .__funcs__ import filter_particle_area
+from .__funcs__ import calc_slc_by_slc_
+from .__funcs__ import crop_from_centre
+from .__funcs__ import sep_cathode

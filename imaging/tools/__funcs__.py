@@ -15,6 +15,7 @@ from scipy import interpolate, ndimage
 from tqdm import tqdm
 
 import skimage.measure as measure
+from skimage.external import tifffile
 
 
 def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,ploton=False):
@@ -302,7 +303,7 @@ def anisodiff3(stack,niter=1,kappa=50,gamma=0.1,step=(1.,1.,1.), sigma=0, option
 
     return stackout
 
-def calc_slc_by_slc(im, phase_val=1, ax='z', frac=True):
+def calc_slc_by_slc(im, phase_val, ax, frac):
     """
         This method will calculate various simple measures from a segmented image 
         that simply involve finding and average or finding a sum of all background or
@@ -327,7 +328,7 @@ def calc_slc_by_slc(im, phase_val=1, ax='z', frac=True):
     # else:
     #     im_ = np.where(im == 255, 1, 0)
 
-    im_ = np.where(im == phase_val, 1, 0)
+    im_ = np.where(im == phase_val, 1, im)
 
 
     if ax == 'z':
@@ -344,11 +345,68 @@ def calc_slc_by_slc(im, phase_val=1, ax='z', frac=True):
     elif ax == 'whole':
         result =  np.mean(im_)
 
-    if ~frac:
-        result = frac * (dim[0] * dim[1])
+    # if ~frac:
+    #     result = result * (dim[0] * dim[1])
 
     return result
     
+def calc_slc_by_slc_(im, phase_val, ax, frac, bg_val=None):
+    """
+        This method will calculate various simple measures 
+        IN A SPECIAL WAY TO ACCOUNT FOR THE FACT THAT THE IMAGE MAY NOT BE BINARY
+
+        @params:
+        im: 3D image in the through plane direction
+        phase: specifies the axis of computation. e.g ax=0 means through plance xtics
+        ax: this is considered with reference to mea placement
+            0 - left to right; 1 - top to bottom; 2 - through plane; 
+        """
+
+    # work image: im_ will be the image with 1s in the required phase
+    dim = im.shape
+
+    # make image into 3D object
+    if len(dim) == 2:
+        im = im.reshape(-1, dim[0], dim[1])
+
+    # if phase == 'black':
+    #     im_ = np.where(im == 0, 1, 0)
+    # else:
+    #     im_ = np.where(im == 255, 1, 0)
+
+    if bg_val is None:
+        bg_val = 0
+
+    im_ = im
+
+
+    if ax == 'z':
+        result = np.mean(np.sum(im_ == phase_val, axis=2) / (np.sum(im_ == phase_val, axis=2) + np.sum(im_ ==bg_val, axis=2)), axis=1)
+        #result = np.mean(im_, axis=1).mean(axis=1)
+
+    elif ax == 'y':
+        result = np.mean(np.sum(im_ == phase_val, axis=0) / (np.sum(im_ == phase_val, axis=0) + np.sum(im_ ==bg_val, axis=0)), axis=1)
+        #result = np.mean(im_, axis=0).mean(axis=1)
+
+
+    elif ax == 'x':
+        result = np.mean(np.sum(im_ == phase_val, axis=0) / (np.sum(im_ == phase_val, axis=0) + np.sum(im_ ==bg_val, axis=0)), axis=0)
+        #result = np.mean(im_, axis=0).mean(axis=0)
+
+
+    elif ax == 'whole':
+        result = np.sum(im_ == phase_val) /(np.sum(im_ == phase_val) + np.sum(im_ == bg_val))
+        #result =  np.mean(im_)
+
+        # if ~frac:
+        #     result = result * (dim[0] * dim[1])
+    
+
+        
+    
+    return result
+    
+
     
 def getWaterVol(im, phase='white', ax='z', fraction=True):
 
@@ -486,7 +544,7 @@ def get_cl_boundary(im, layer_to_keep='top'):
     return interp_im
 
 
-def fill_boundary(im, side_to_keep='top'):
+def fill_boundary(im, side_to_keep='top', offset=None):
     
     # filling up the relevat boundaries. For the setup, the cathode is up and the
     # anode is down. The filling strategy is to fill from slice 0 to top of cathode_cl
@@ -498,14 +556,21 @@ def fill_boundary(im, side_to_keep='top'):
     # we subtract it from each of the slices (which we fill with slice number) and if -ve
     # it implies it is below it, and if +ve it means the point is above it
     
+    if offset is None:
+        offset = 0
+
     #im = tifffile.imread(os.path.join(cl_outline_im_path))
     dim = im.shape
     
     # check what layer of the outline to keep, since cathode is at bottom, 
     # you want to keep the top layer
 
-    bndry_slc = np.argmax(im, axis=0)
-        
+    bndry_slc = np.argmax(im, axis=0) 
+
+    if side_to_keep == 'top':
+        bndry_slc = bndry_slc - offset
+    if side_to_keep == 'bottom':
+        bndry_slc = bndry_slc + offset        
     # bndry_slc is a matrix with non zero items which represents the 
     # border point for the particular location e.g if (x, y) = 100 -> the 
     # border point for loc (x,y)  occurs on slice 100
@@ -526,6 +591,29 @@ def fill_boundary(im, side_to_keep='top'):
     
     return gdl_mask   
 
+def sep_cathode(ccseg_path, full_im_path, offset):
+    
+    im = tifffile.imread(full_im_path)
+    cseg = tifffile.imread(ccseg_path)
+
+    # get boundary and mask
+    gdl_bondry = get_cl_boundary(cseg, layer_to_keep='bottom')  # bottom boundary of ccl
+    c_gdl_mask = fill_boundary(gdl_bondry, side_to_keep='bottom')  # mask of gdl
+
+    # select cathode gdl region
+    im_cgdl = np.float32(np.int32(c_gdl_mask / 255) * np.int32(im))  
+
+    # trim original data to include just the cgdl region
+    z, _, _ = np.nonzero(im_cgdl)  
+    gdl_cut_point = np.min(z)  # slice of the topmost gdl point
+    #im_cgdl = im_cgdl[gdl_cut_point:,:, :].copy()/
+
+    # the plus 2 is added so that the data siet matches the dry in dimension
+    im_cgdl = im_cgdl[gdl_cut_point+offset:,:, :].copy()
+    
+    return im_cgdl
+
+
 def filter_particle_area(label, thresh):
     """ 
     return: f_label - particle_size filtered image according to thresh and each pixel now has the component size
@@ -542,3 +630,11 @@ def filter_particle_area(label, thresh):
     
         
     return f_label
+
+def crop_from_centre(x, width):
+    
+    mid = x.shape[1] //2
+    
+    crop = x[:, mid-width:mid+width, mid-width:mid+width]
+    
+    return crop
