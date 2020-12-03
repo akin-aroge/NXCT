@@ -20,8 +20,8 @@ class nG20PolCurve(PolCurve):
         pol_data_part.columns = data_part.iloc[0, :].values
         pol_data_part = pol_data_part.iloc[:, 4:]
 
-        current = pol_data_part['current'].values
-        voltage = pol_data_part['voltage'].values
+        current = pd.to_numeric(pol_data_part['current'].values)
+        voltage = pd.to_numeric(pol_data_part['voltage'].values)
 
         #data = pd.DataFrame(raw_data[0].str.split(',').tolist())
         # current = pd.to_numeric(data.iloc[6:, 4].values)
