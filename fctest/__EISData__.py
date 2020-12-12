@@ -16,6 +16,7 @@ class EISData:
     def plot_nyquist(self, label=None, unflip_im_axis=None, return_axis=None, ax=None, asr=None):
         
         z_im = self.z_im
+        z_re = self.z_re
         
         
         if ax is None:
