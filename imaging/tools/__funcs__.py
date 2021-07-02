@@ -15,7 +15,9 @@ from scipy import interpolate, ndimage
 from tqdm import tqdm
 
 import skimage.measure as measure
-from skimage.external import tifffile
+from joblib import Parallel, delayed
+from skimage.io import imread, imsave
+import skimage as sk
 
 
 def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,ploton=False):
@@ -303,156 +305,35 @@ def anisodiff3(stack,niter=1,kappa=50,gamma=0.1,step=(1.,1.,1.), sigma=0, option
 
     return stackout
 
-def calc_slc_by_slc(im, phase_val, ax, frac):
-    """
-        This method will calculate various simple measures from a segmented image 
-        that simply involve finding and average or finding a sum of all background or
-        foreground piictures depending on phase
-
-        @params:
-        im: 3D image in the through plane direction
-        phase: specifies the axis of computation. e.g ax=0 means through plance xtics
-        ax: this is considered with reference to mea placement
-            0 - left to right; 1 - top to bottom; 2 - through plane; 
-        """
-
-    # work image: im_ will be the image with 1s in the required phase
+    
+def get_phase_frac(im, phase_val, ax):
+    
     dim = im.shape
-
-    # make image into 3D object
+    
     if len(dim) == 2:
         im = im.reshape(-1, dim[0], dim[1])
-
-    # if phase == 'black':
-    #     im_ = np.where(im == 0, 1, 0)
-    # else:
-    #     im_ = np.where(im == 255, 1, 0)
-
-    im_ = np.where(im == phase_val, 1, im)
-
-
-    if ax == 'z':
-        result = np.mean(im_, axis=1).mean(axis=1)
-
+        dim = im.shape
+        
+    im_ = np.where(im == phase_val, 1, 0)
+    
+    if ax == 'x':
+        result = np.sum(im_, axis=0).sum(axis=0) / (dim[0] * dim[2])
+        
     elif ax == 'y':
-        result = np.mean(im_, axis=0).mean(axis=1)
-
-
-    elif ax == 'x':
-        result = np.mean(im_, axis=0).mean(axis=0)
-
-
-    elif ax == 'whole':
-        result =  np.mean(im_)
-
-    # if ~frac:
-    #     result = result * (dim[0] * dim[1])
-
+        result = np.sum(im_, axis=0).sum(axis=1) / (dim[0] * dim[1])
+    
+    elif ax == 'z':
+        result = np.sum(im_, axis=1).sum(axis=1) / (dim[1] * dim[2])
+        
+        
     return result
+
+def get_porosity(im, phase_val):
     
-def calc_slc_by_slc_(im, phase_val, ax, frac, bg_val=None):
-    """
-        This method will calculate various simple measures 
-        IN A SPECIAL WAY TO ACCOUNT FOR THE FACT THAT THE IMAGE MAY NOT BE BINARY
+    ps = np.mean(np.where(im==phase_val, 1, 0))
 
-        @params:
-        im: 3D image in the through plane direction
-        phase: specifies the axis of computation. e.g ax=0 means through plance xtics
-        ax: this is considered with reference to mea placement
-            0 - left to right; 1 - top to bottom; 2 - through plane; 
-        """
-
-    # work image: im_ will be the image with 1s in the required phase
-    dim = im.shape
-
-    # make image into 3D object
-    if len(dim) == 2:
-        im = im.reshape(-1, dim[0], dim[1])
-
-    # if phase == 'black':
-    #     im_ = np.where(im == 0, 1, 0)
-    # else:
-    #     im_ = np.where(im == 255, 1, 0)
-
-    if bg_val is None:
-        bg_val = 0
-
-    im_ = im
-
-
-    if ax == 'z':
-        result = np.mean(np.sum(im_ == phase_val, axis=2) / (np.sum(im_ == phase_val, axis=2) + np.sum(im_ ==bg_val, axis=2)), axis=1)
-        #result = np.mean(im_, axis=1).mean(axis=1)
-
-    elif ax == 'y':
-        result = np.mean(np.sum(im_ == phase_val, axis=0) / (np.sum(im_ == phase_val, axis=0) + np.sum(im_ ==bg_val, axis=0)), axis=1)
-        #result = np.mean(im_, axis=0).mean(axis=1)
-
-
-    elif ax == 'x':
-        result = np.mean(np.sum(im_ == phase_val, axis=0) / (np.sum(im_ == phase_val, axis=0) + np.sum(im_ ==bg_val, axis=0)), axis=0)
-        #result = np.mean(im_, axis=0).mean(axis=0)
-
-
-    elif ax == 'whole':
-        result = np.sum(im_ == phase_val) /(np.sum(im_ == phase_val) + np.sum(im_ == bg_val))
-        #result =  np.mean(im_)
-
-        # if ~frac:
-        #     result = result * (dim[0] * dim[1])
+    return ps
     
-
-        
-    
-    return result
-    
-
-    
-def getWaterVol(im, phase='white', ax='z', fraction=True):
-
-    # work image: im_ will be the image with 1s in the required phase
-    dim = im.shape
-
-    # make image into 3D object
-    if len(dim) == 2:
-        im = im.reshape(-1, dim[0], dim[1])
-
-    if phase == 'black':
-        im_ = np.where(im == 0, 1, 0)
-    else:
-        im_ = np.where(im == 255, 1, 0)
-        
-    if fraction:
-    
-#             planar_result_2d = np.mean(im_, axis=0)
-#             top_down_2d = np.mean(im_, axis=1);
-#             left_right_2d = np.mean(im_, axis=2)
-        
-        planar_result = np.mean(im_, axis=1).mean(axis=1)
-        top_down = np.mean(im_, axis=0).mean(axis=1)
-        left_right = np.mean(im_, axis=0).mean(axis=0)
-        
-    else:
-        planar_result = np.sum(im_, axis=1).sum(axis=1)
-        top_down = np.sum(im_, axis=0).sum(axis=1)
-        left_right = np.sum(im_, axis=0).sum(axis=0)
-
-
-    if ax == 'z':
-        return planar_result #, planar_result_2d
-
-    elif ax == 'y':
-        return top_down #, top_down_2d
-
-    elif ax == 'x':
-        return left_right #, left_right_2d
-    elif ax == 'whole':
-        return np.sum(im_)
-    
-
-    
-
-
 
 
 def gaussian(x, mu, var):
@@ -502,10 +383,10 @@ def gauss_fit1D(data, n_comp=1, comps=[''], bins=50, n_sample=100, title='', ran
 
     return fig, ax, mus, stds, ws
 
-def get_cl_boundary(im, layer_to_keep='top'):
+def get_cl_boundary(im, layer_to_keep='top', offset=0):
     """ im: segmented catalyst outline image"""
     
-    #cl_outline_im = tifffile.imread(os.path.join(cl_outline_im_path))
+    #cl_outline_im = imread(os.path.join(cl_outline_im_path))
     dim = im.shape
     
     # check what layer of the outline to keep, since cathode is at bottom, 
@@ -536,7 +417,7 @@ def get_cl_boundary(im, layer_to_keep='top'):
     [xx,yy] = np.meshgrid(nx,ny) #grid to fit interpolation values
     
     interp = interpolate.griddata((col, row), z, (xx, yy), method='nearest')
-    interp_smooth = ndimage.uniform_filter(interp, size=10)
+    interp_smooth = ndimage.uniform_filter(interp, size=10) + offset
     
     # return all to image
     interp_im[interp_smooth, yy, xx] = 255
@@ -559,7 +440,7 @@ def fill_boundary(im, side_to_keep='top', offset=None):
     if offset is None:
         offset = 0
 
-    #im = tifffile.imread(os.path.join(cl_outline_im_path))
+    #im = imread(os.path.join(cl_outline_im_path))
     dim = im.shape
     
     # check what layer of the outline to keep, since cathode is at bottom, 
@@ -593,11 +474,11 @@ def fill_boundary(im, side_to_keep='top', offset=None):
 
 def sep_cathode(ccseg_path, full_im_path, offset):
     
-    im = tifffile.imread(full_im_path)
-    cseg = tifffile.imread(ccseg_path)
+    im = imread(full_im_path)
+    cseg = imread(ccseg_path)
 
     # get boundary and mask
-    gdl_bondry = get_cl_boundary(cseg, layer_to_keep='bottom')  # bottom boundary of ccl
+    gdl_bondry = get_cl_boundary(cseg, layer_to_keep='bottom', offset=offset)  # bottom boundary of ccl
     c_gdl_mask = fill_boundary(gdl_bondry, side_to_keep='bottom')  # mask of gdl
 
     # select cathode gdl region
@@ -609,9 +490,148 @@ def sep_cathode(ccseg_path, full_im_path, offset):
     #im_cgdl = im_cgdl[gdl_cut_point:,:, :].copy()/
 
     # the plus 2 is added so that the data siet matches the dry in dimension
-    im_cgdl = im_cgdl[gdl_cut_point+offset:,:, :].copy()
+    im_cgdl = im_cgdl[gdl_cut_point:,:, :].copy()
     
     return im_cgdl
+
+def gauss_filter(image, sigma):
+    
+    return sk.filters.gaussian(image, sigma, preserve_range=True)
+
+
+def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100)):
+    """
+    Corrects illumination across the stack of radiographs for quantitative information.
+    The algorithm uses a reference patch which gives a sort of basis vector. 
+    The relevant scaling  is obtained for the whole plane. 
+    The basis vector is further decomposed into pattern, and trend component modelled by the change in GSV
+    """
+
+    shape = im.shape    
+    im_G = []
+    im_G.extend(Parallel(n_jobs=5)(delayed(gauss_filter)(slc, sigma)  for slc in im))
+    im_G = np.array(im_G, dtype=np.float32)
+    
+    # pick the edge that would serve as reference where image does not change
+    # in the through plane direction
+    #l=15; r=150; t=747; b=1080
+    l = ref_region_spec[0]; t = ref_region_spec[1]; w = ref_region_spec[2]
+    r = l + w; b = t + w
+    #ref_centre_idx = (l+(r-l)//2, t+(b-l)//2)
+    im_G_ref_patch = im_G[:, t:b, l:r]    
+
+    # compute the throughplane change
+    ref_patch_mean = np.mean(im_G_ref_patch, axis=1).mean(axis=1)
+    # subtract mean appears to do what I just want see calc in one note
+    ref_patch_mean0 = ref_patch_mean - np.mean(ref_patch_mean)  
+
+    im_G_mean0 = im_G  - np.mean(im_G, axis=0)
+    del im_G
+
+    # Derive trend to be removed from signal. This improves the computation of the scale field
+    p = np.polyfit(np.arange(shape[0]), ref_patch_mean0, deg=1) # degree 1 works well for now
+    trend = np.polyval(p, np.arange(shape[0]))
+    trend_ = trend + np.abs(np.min(trend))
+
+    ref_patch_detrend = ref_patch_mean0 - trend
+    im_G_detrend = im_G_mean0 - trend.reshape(-1, 1, 1)
+    del im_G_mean0
+    ref_patch_norm = ref_patch_detrend / np.linalg.norm(ref_patch_detrend)
+    
+    im_scale_field = np.sum(ref_patch_norm.reshape(-1, 1, 1) * im_G_detrend, axis=0, dtype=np.float32)
+
+    # recreate: we would use the pattern on the throu plane change at this reference and scale it accordingly
+    # accross the plane
+    im_correction = im_scale_field * np.float32(ref_patch_norm.reshape(-1, 1, 1)) + np.float32(trend.reshape(-1, 1, 1))
+    #del im_scale_field
+    im_corrected = im - im_correction
+    del im_correction
+
+    
+    return np.float32(im_corrected), im_scale_field
+
+
+def correct_illum_m2(im, sigma=5, ref_region_spec=(15, 747, 100)):
+    #im_G = np.zeros_like(im)
+#     for i, slc in enumerate(im):
+
+#         im_G[i] = sk.filters.gaussian(slc, sigma=sigma, preserve_range=True)
+    shape = im.shape    
+    im_G = []
+    im_G.extend(Parallel(n_jobs=5)(delayed(gauss_filter)(slc, sigma)  for slc in im))
+    im_G = np.float32(np.array(im_G))
+    
+    # pick the edge that would serve as reference where image does not change
+    # in the through plane direction
+    #l=15; r=150; t=747; b=1080
+    l = ref_region_spec[0]; t = ref_region_spec[1]; w = ref_region_spec[2]
+    r = l + w; b = t + w
+    ref_centre_idx = (l+(r-l)//2, t+(b-l)//2)
+    im_G_ref_patch = im_G[:, t:b, l:r]    
+
+    # compute the throughplane change
+    ref_patch_mean = np.mean(im_G_ref_patch, axis=1).mean(axis=1)
+    # subtract mean appears to do what I just want see calc in one note
+    ref_patch_mean = ref_patch_mean - np.mean(ref_patch_mean)   
+
+    # we would use the pattern on the throu plane change at this reference and scale it accordingly
+    # accross the plane
+
+    ref_patch_norm = ref_patch_mean / np.linalg.norm(ref_patch_mean)
+    im_scale_field = np.sum(ref_patch_norm.reshape(-1, 1, 1) * im_G, axis=0)
+
+    im_correction = im_scale_field * ref_patch_norm.reshape(-1, 1, 1)
+
+    #im_corrected = im - im_correction + im[0]  # this one takes the image to typical values
+    im_corrected = im - im_correction
+    
+    return im_corrected#, im_scale_field
+
+
+def correct_illum_m3(im, sigma=250):
+    #im_G = np.zeros_like(im)
+#     for i, slc in enumerate(im):
+
+#         im_G[i] = sk.filters.gaussian(slc, sigma=sigma, preserve_range=True)
+    shape = im.shape    
+    im_G = []
+    im_G.extend(Parallel(n_jobs=5)(delayed(gauss_filter)(slc, sigma)  for slc in im))
+    im_G = np.float32(np.array(im_G))
+    
+    # pick the edge that would serve as reference where image does not change
+    # in the through plane direction
+    l=15; r=150; t=747; b=1080
+    crop_centre_idx = (l+(r-l)//2, t+(b-l)//2)
+    im_G_edge_crop = im_G[:, t:b, l:r]    
+
+    # compute the throughplane change
+    z_sum = np.mean(im_G_edge_crop, axis=1).mean(axis=1)
+    z_sum_diff = np.diff(z_sum)
+
+    # we would use the patter on the throu plane change at this reference and scale it accordingly
+    # accross the plane
+
+    # first pick a notable point in the through-plane direction: that max
+    max_delta_idx = np.argmax(z_sum_diff)  # index of max change
+
+    # find the corresponding changes aacross the plane
+    im_max_diff  = im_G[max_delta_idx+1] - im_G[max_delta_idx]
+
+    # find the scaling factor: how that point scales across the field
+    # this scaling will be used to generate other points from the reference through-plane change 
+    #im_scale_field = im_max_diff / z_sum_diff[max_delta_idx]
+    im_scale_field = im_max_diff / im_max_diff[crop_centre_idx[1], crop_centre_idx[0]]
+
+    # generate full stack changes and include initial zero
+    im_correction_delta = im_scale_field * z_sum_diff.reshape(-1, 1, 1)
+    im_correction_delta = np.insert(im_correction_delta, 0, 
+                                    np.zeros((shape[1],shape[2])), axis=0)
+
+    # the corrected image will be the raw image with the cumulative sum removed
+    im_corrected = im - np.cumsum(im_correction_delta, axis=0)
+    
+    return im_corrected, im_scale_field
+
 
 
 def filter_particle_area(label, thresh):
