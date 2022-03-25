@@ -18,6 +18,7 @@ import skimage.measure as measure
 from joblib import Parallel, delayed
 from skimage.io import imread, imsave
 import skimage as sk
+import os
 
 
 def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,ploton=False):
@@ -324,9 +325,72 @@ def get_phase_frac(im, phase_val, ax):
     
     elif ax == 'z':
         result = np.sum(im_, axis=1).sum(axis=1) / (dim[1] * dim[2])
+
+    elif ax is None:
+        result = np.mean(im_)
         
         
     return result
+
+def get_saturation(im, air_phase_val, sat_phase_val, ax):
+
+    sat_frac = get_phase_frac(im, phase_val=sat_phase_val, ax=ax)
+    air_frac = get_phase_frac(im, phase_val=air_phase_val, ax=ax)
+    saturation = sat_frac / (sat_frac + air_frac)
+
+    return saturation
+
+def get_z_aixs_profile(im_stack,  agg_func=None, phase_val=None):
+
+    """returns an array where each item reprpesents a measure of the grayscale profile
+    for the correspoiding slice
+    """
+
+    # if phase_val is None:
+    #     phase_val = 255
+
+    if phase_val is not None:
+        im_stack = np.where(im_stack == phase_val, 1, 0)
+
+    shape = im_stack.shape
+    x = np.reshape(im_stack, (shape[0], shape[1]*shape[2]))
+
+    if agg_func is None:
+        agg_func = np.mean
+
+
+    profile = agg_func(x, axis=1)
+
+    return profile
+
+def norm_stack(im_stack, normalizer=None, how=None):
+
+    shape = im_stack.shape
+
+    if normalizer is None:
+        normalizer = im_stack[0]
+
+    if how is None:
+        how = "ratio"
+
+    if how == "ratio":
+        im_normed = im_stack / normalizer
+    elif how == "diff":
+        im_normed = im_stack - normalizer
+
+    
+
+    # im_normed_f = []
+    # sigma=10
+    # im_normed_f.extend(Parallel(n_jobs=5)(delayed(gauss_filter)(slc, sigma)  for slc in im_normed))
+    im_normed_f = np.zeros_like(im_stack, dtype=np.float32)
+    for slc_idx in np.arange(shape[0]):
+        slc = im_normed[slc_idx]
+        im_normed_f[slc_idx, :, :] = flt.gaussian_filter(slc, sigma=10)
+
+    return im_normed_f
+    
+
 
 def get_porosity(im, phase_val):
     
@@ -456,13 +520,14 @@ def fill_boundary(im, side_to_keep='top', offset=None):
     # border point for the particular location e.g if (x, y) = 100 -> the 
     # border point for loc (x,y)  occurs on slice 100
 
-
+    del im
 
     gdl_mask = np.zeros(dim, dtype=np.uint8) 
     decision_im = gdl_mask \
                     + np.arange(dim[0]).reshape(-1, 1, 1) \
                     - bndry_slc
 
+    del bndry_slc
     if side_to_keep == 'top':
         mz, mrow, mcol = np.where(decision_im < 0)  # select point before boundary
     elif side_to_keep == 'bottom':
@@ -472,27 +537,31 @@ def fill_boundary(im, side_to_keep='top', offset=None):
     
     return gdl_mask   
 
-def sep_cathode(ccseg_path, full_im_path, offset):
+def sep_cathode(ccseg_path, full_im_path, offset, trim=True):
     
     im = imread(full_im_path)
     cseg = imread(ccseg_path)
 
+    im_dtype = str(im.dtype)
+
     # get boundary and mask
     gdl_bondry = get_cl_boundary(cseg, layer_to_keep='bottom', offset=offset)  # bottom boundary of ccl
     c_gdl_mask = fill_boundary(gdl_bondry, side_to_keep='bottom')  # mask of gdl
-
+    del gdl_bondry, cseg
     # select cathode gdl region
-    im_cgdl = np.float32(np.int32(c_gdl_mask / 255) * np.int32(im))  
+    im_cgdl = np.int32(np.int32(c_gdl_mask / 255) * np.int32(im)) 
+    del c_gdl_mask, im 
 
+    if trim:
     # trim original data to include just the cgdl region
-    z, _, _ = np.nonzero(im_cgdl)  
-    gdl_cut_point = np.min(z)  # slice of the topmost gdl point
-    #im_cgdl = im_cgdl[gdl_cut_point:,:, :].copy()/
+        z, _, _ = np.nonzero(im_cgdl)  
+        gdl_cut_point = np.min(z)  # slice of the topmost gdl point
+        #im_cgdl = im_cgdl[gdl_cut_point:,:, :].copy()
 
-    # the plus 2 is added so that the data siet matches the dry in dimension
-    im_cgdl = im_cgdl[gdl_cut_point:,:, :].copy()
+        # the plus 2 is added so that the data siet matches the dry in dimension
+        im_cgdl = im_cgdl[gdl_cut_point:,:, :].copy()
     
-    return im_cgdl
+    return np.array(im_cgdl, dtype=im_dtype)
 
 def gauss_filter(image, sigma):
     
@@ -506,7 +575,6 @@ def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100)):
     The relevant scaling  is obtained for the whole plane. 
     The basis vector is further decomposed into pattern, and trend component modelled by the change in GSV
     """
-
     shape = im.shape    
     im_G = []
     im_G.extend(Parallel(n_jobs=5)(delayed(gauss_filter)(slc, sigma)  for slc in im))
@@ -519,12 +587,10 @@ def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100)):
     r = l + w; b = t + w
     #ref_centre_idx = (l+(r-l)//2, t+(b-l)//2)
     im_G_ref_patch = im_G[:, t:b, l:r]    
-
     # compute the throughplane change
     ref_patch_mean = np.mean(im_G_ref_patch, axis=1).mean(axis=1)
     # subtract mean appears to do what I just want see calc in one note
     ref_patch_mean0 = ref_patch_mean - np.mean(ref_patch_mean)  
-
     im_G_mean0 = im_G  - np.mean(im_G, axis=0)
     del im_G
 
@@ -532,14 +598,12 @@ def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100)):
     p = np.polyfit(np.arange(shape[0]), ref_patch_mean0, deg=1) # degree 1 works well for now
     trend = np.polyval(p, np.arange(shape[0]))
     trend_ = trend + np.abs(np.min(trend))
-
     ref_patch_detrend = ref_patch_mean0 - trend
     im_G_detrend = im_G_mean0 - trend.reshape(-1, 1, 1)
     del im_G_mean0
     ref_patch_norm = ref_patch_detrend / np.linalg.norm(ref_patch_detrend)
     
     im_scale_field = np.sum(ref_patch_norm.reshape(-1, 1, 1) * im_G_detrend, axis=0, dtype=np.float32)
-
     # recreate: we would use the pattern on the throu plane change at this reference and scale it accordingly
     # accross the plane
     im_correction = im_scale_field * np.float32(ref_patch_norm.reshape(-1, 1, 1)) + np.float32(trend.reshape(-1, 1, 1))
@@ -547,7 +611,6 @@ def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100)):
     im_corrected = im - im_correction
     del im_correction
 
-    
     return np.float32(im_corrected), im_scale_field
 
 
@@ -567,7 +630,7 @@ def correct_illum_m2(im, sigma=5, ref_region_spec=(15, 747, 100)):
     l = ref_region_spec[0]; t = ref_region_spec[1]; w = ref_region_spec[2]
     r = l + w; b = t + w
     ref_centre_idx = (l+(r-l)//2, t+(b-l)//2)
-    im_G_ref_patch = im_G[:, t:b, l:r]    
+    im_G_ref_patch = im_G[:, t:b, l:r].copy()   
 
     # compute the throughplane change
     ref_patch_mean = np.mean(im_G_ref_patch, axis=1).mean(axis=1)
@@ -588,7 +651,7 @@ def correct_illum_m2(im, sigma=5, ref_region_spec=(15, 747, 100)):
     return im_corrected#, im_scale_field
 
 
-def correct_illum_m3(im, sigma=250):
+def correct_illum_m3(im, sigma=250, ref_region_spec=(15, 747, 100)):
     #im_G = np.zeros_like(im)
 #     for i, slc in enumerate(im):
 
@@ -600,7 +663,9 @@ def correct_illum_m3(im, sigma=250):
     
     # pick the edge that would serve as reference where image does not change
     # in the through plane direction
-    l=15; r=150; t=747; b=1080
+    l = ref_region_spec[0]; t = ref_region_spec[1]; w = ref_region_spec[2]
+    r = l + w; b = t + w
+    #l=15; r=150; t=747; b=1080
     crop_centre_idx = (l+(r-l)//2, t+(b-l)//2)
     im_G_edge_crop = im_G[:, t:b, l:r]    
 
@@ -619,8 +684,8 @@ def correct_illum_m3(im, sigma=250):
 
     # find the scaling factor: how that point scales across the field
     # this scaling will be used to generate other points from the reference through-plane change 
-    #im_scale_field = im_max_diff / z_sum_diff[max_delta_idx]
-    im_scale_field = im_max_diff / im_max_diff[crop_centre_idx[1], crop_centre_idx[0]]
+    im_scale_field = im_max_diff / z_sum_diff[max_delta_idx]
+    #im_scale_field = im_max_diff / im_max_diff[crop_centre_idx[1], crop_centre_idx[0]]
 
     # generate full stack changes and include initial zero
     im_correction_delta = im_scale_field * z_sum_diff.reshape(-1, 1, 1)
@@ -630,7 +695,7 @@ def correct_illum_m3(im, sigma=250):
     # the corrected image will be the raw image with the cumulative sum removed
     im_corrected = im - np.cumsum(im_correction_delta, axis=0)
     
-    return im_corrected, im_scale_field
+    return im_corrected #, im_scale_field
 
 
 
@@ -653,8 +718,25 @@ def filter_particle_area(label, thresh):
 
 def crop_from_centre(x, width):
     
-    mid = x.shape[1] //2
+    mid_x = x.shape[1] // 2
+    mid_y = x.shape[2] // 2 
     
-    crop = x[:, mid-width:mid+width, mid-width:mid+width]
+    crop = x[:, mid_x-(width//2):mid_x+(width//2), mid_y-(width//2):mid_y+(width//2)]
     
     return crop
+
+def save_figure(fname, obj, figdir=None):
+    """wrapper to save figure in desied directory"""
+    if figdir is None:
+        figdir = r"..\\..\\..\\..\\..\\..\sfu\phd\research_in_motion\development\write-up\misc"
+    path = os.path.join(os.path.normpath(figdir), fname)
+    obj.savefig(path, bbox_inches='tight')
+
+
+
+def save_image(fname, obj, save_dir=None):
+    """wrapper to save figure in desied directory"""
+    if save_dir is None:
+        figdir = r""
+    path = os.path.join(os.path.normpath(save_dir), fname)
+    imsave(path, obj)

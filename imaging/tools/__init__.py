@@ -1,6 +1,7 @@
 from .__funcs__ import anisodiff
 from .__funcs__ import anisodiff3
 from .__funcs__ import get_phase_frac
+from .__funcs__ import get_saturation
 from .__funcs__ import gauss_fit1D
 from .__funcs__ import get_cl_boundary
 from .__funcs__ import fill_boundary
@@ -11,3 +12,7 @@ from .__funcs__ import get_porosity
 from .__funcs__ import correct_illum
 from .__funcs__ import correct_illum_m2
 from .__funcs__ import correct_illum_m3
+from .__funcs__ import get_z_aixs_profile
+from .__funcs__ import norm_stack
+from .__funcs__ import save_figure
+from .__funcs__ import save_image
