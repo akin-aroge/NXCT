@@ -447,7 +447,7 @@ def gauss_fit1D(data, n_comp=1, comps=[''], bins=50, n_sample=100, title='', ran
 
     return fig, ax, mus, stds, ws
 
-def get_cl_boundary(im, layer_to_keep='top', offset=0):
+def get_cl_boundary(im, layer_to_keep='top', offset=0, connect=False):
     """ im: segmented catalyst outline image"""
     
     #cl_outline_im = imread(os.path.join(cl_outline_im_path))
@@ -475,16 +475,21 @@ def get_cl_boundary(im, layer_to_keep='top', offset=0):
     # interp_smooth is 2D array where value of point (x, y) is the 
     # boundary slice number. This is also smoothened with filter        
     interp_im = np.zeros(dim, dtype=np.uint8)
+
     ny = np.arange(0, dim[1])
     nx = np.arange(0, dim[2])
     
     [xx,yy] = np.meshgrid(nx,ny) #grid to fit interpolation values
     
     interp = interpolate.griddata((col, row), z, (xx, yy), method='nearest')
-    interp_smooth = ndimage.uniform_filter(interp, size=10) + offset
+
+    if connect:
+        interp = ndimage.uniform_filter(interp, size=10) + offset
+
     
     # return all to image
-    interp_im[interp_smooth, yy, xx] = 255
+    #interp_im[interp, yy, xx] = 255
+    interp_im[z, row, col] = 255
     
     return interp_im
 
@@ -611,7 +616,7 @@ def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100)):
     im_corrected = im - im_correction
     del im_correction
 
-    return np.float32(im_corrected), im_scale_field
+    return np.float32(im_corrected)#, im_scale_field
 
 
 def correct_illum_m2(im, sigma=5, ref_region_spec=(15, 747, 100)):
