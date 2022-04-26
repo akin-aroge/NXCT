@@ -481,16 +481,16 @@ def get_cl_boundary(im, layer_to_keep='top', offset=0, connect=False):
     
     [xx,yy] = np.meshgrid(nx,ny) #grid to fit interpolation values
     
-    interp = interpolate.griddata((col, row), z, (xx, yy), method='nearest')
+
 
     if connect:
+        interp = interpolate.griddata((col, row), z, (xx, yy), method='nearest')
         interp = ndimage.uniform_filter(interp, size=10) + offset
 
-    
-    # return all to image
-    #interp_im[interp, yy, xx] = 255
-    interp_im[z, row, col] = 255
-    
+        interp_im[interp, yy, xx] = 255
+    else:
+        interp_im[z, row, col] = 255
+
     return interp_im
 
 
