@@ -7,7 +7,7 @@ class AutoLEISData(EISData):
 
     ENCODING = "ISO-8859-1"
     
-    def __init__(self, data_path):
+    def __init__(self, data_path, mea_area):
 
         raw_data = pd.read_csv(data_path, sep='\t')
         raw_data = raw_data.iloc[:, 0].str.split(',', expand=True)
@@ -30,7 +30,7 @@ class AutoLEISData(EISData):
         z_ph = np.arctan2(z_real, z_im)
 
 
-        super().__init__(z_re=z_real, z_im=z_im, mag=z_mod, freqs=freqs, mea_area=0)
+        super().__init__(z_re=z_real, z_im=z_im, mag=z_mod, freqs=freqs, mea_area=mea_area)
 
         # other properties specific to G20
         #self.test_date = test_date
