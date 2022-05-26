@@ -8,6 +8,8 @@ class EISData:
     def __init__(self, z_re, z_im, mag, freqs, mea_area):
         self.z_re = z_re
         self.z_im = z_im
+        self.z_im_asr = z_im * mea_area
+        self.z_re_asr = z_re * mea_area
         self.freqs = freqs
         self.mag = mag
         self.mea_area = mea_area
@@ -20,6 +22,7 @@ class EISData:
         
         
         if ax is None:
+            #fig, ax = plt.subplots()
             ax = plt.gca()
             
         if asr is None or asr == True:
