@@ -7,7 +7,7 @@ class AutoLEISData(EISData):
 
     ENCODING = "ISO-8859-1"
     
-    def __init__(self, data_path, mea_area):
+    def __init__(self, data_path, mea_area, cell_name=None):
 
         raw_data = pd.read_csv(data_path, sep='\t')
         raw_data = raw_data.iloc[:, 0].str.split(',', expand=True)
@@ -38,3 +38,4 @@ class AutoLEISData(EISData):
         #self.final_freq = final_freq
         #self.points_per_decade = pts_per_decade
         self.file_name = os.path.basename(data_path)
+        self.cell_name = cell_name
