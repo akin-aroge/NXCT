@@ -7,7 +7,7 @@ class G20PolCurve(PolCurve):
 
     # mea_active_area = 0.21
 
-    def __init__(self, path, mea_active_area):
+    def __init__(self, path, mea_active_area, comment=None):
 
         path = os.path.normpath(path)
 
@@ -24,6 +24,7 @@ class G20PolCurve(PolCurve):
         self.test_date = test_date
         self.mea_active_area = mea_active_area
         self.file_name = os.path.basename(path)
+        self.comment = comment
 
 
         

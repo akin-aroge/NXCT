@@ -1,1 +1,1 @@
-from .ScribPol import ScribPolCurve
+from .ScribPol import ScribPol

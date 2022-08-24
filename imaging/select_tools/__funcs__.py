@@ -68,6 +68,15 @@ def rect_crop_2D(im, rect_spec):
 
     return im_crop
 
+def crop_from_centre(x, width):
+    
+    mid_x = x.shape[1] // 2
+    mid_y = x.shape[2] // 2 
+    
+    crop = x[:, mid_x-(width//2):mid_x+(width//2), mid_y-(width//2):mid_y+(width//2)]
+    
+    return crop
+
 def get_imagej_rect_centre(rect_spec):
     
     x = rect_spec[0] + rect_spec[2] // 2

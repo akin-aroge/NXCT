@@ -48,7 +48,7 @@ class EISData:
             
 
  
-        ax.plot(z_re, z_im, '-.', label=label)
+        ax.plot(z_re, z_im, '.-', label=label)
 
 
         #ax.set_ylabel('$\minus$Im(Z) $\Omega$')

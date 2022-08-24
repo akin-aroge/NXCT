@@ -550,7 +550,7 @@ def sep_cathode(ccseg_path, full_im_path, offset, trim=True):
     im_dtype = str(im.dtype)
 
     # get boundary and mask
-    gdl_bondry = get_cl_boundary(cseg, layer_to_keep='bottom', offset=offset)  # bottom boundary of ccl
+    gdl_bondry = get_cl_boundary(cseg, layer_to_keep='bottom', offset=offset, connect=True)  # bottom boundary of ccl
     c_gdl_mask = fill_boundary(gdl_bondry, side_to_keep='bottom')  # mask of gdl
     del gdl_bondry, cseg
     # select cathode gdl region
@@ -567,6 +567,8 @@ def sep_cathode(ccseg_path, full_im_path, offset, trim=True):
         im_cgdl = im_cgdl[gdl_cut_point:,:, :].copy()
     
     return np.array(im_cgdl, dtype=im_dtype)
+
+
 
 def gauss_filter(image, sigma):
     
