@@ -2,6 +2,9 @@
 # from . import G20CVData
 # from . import G20PolCurve
 
-from . import  g20
+import imp
+from . import g20
 from . import auotolab
 from . import scribner
+from . import GenericPol
+from .GenericPol import GenericPol
