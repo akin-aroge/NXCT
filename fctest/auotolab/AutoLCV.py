@@ -17,4 +17,5 @@ class AutoLCV(CVData):
         self.potential = potential
         self.current = current
         self.scan_num = scan_num
+        self.file_name = os.path.basename(data_path)
     

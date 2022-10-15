@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 class EISData:
     """
@@ -78,9 +79,11 @@ class EISData:
             return fig
 
     def get_high_freq_intercept(self):
-        idx = self.freqs.argmax()
+        idx = np.argmin(np.abs(self.z_im - 0))  # index closest to zero on im
 
-        return self.z_re[idx]
+        hfr = self.z_re_asr[idx]    
+
+        return hfr
 
         # todo: I need to check if it is really and intercept 
         #       (crosses zero)

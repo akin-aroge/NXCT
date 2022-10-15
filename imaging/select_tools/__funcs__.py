@@ -1,4 +1,5 @@
 import numpy as np
+import imaging as ig
 
 def select_phase(im, phase_val):
     
@@ -100,3 +101,18 @@ def get_imagej_rect_props(rect_spec):
     props = {'centre': (x,y), 'height':height, 'width':width, 'top-left':top_left, 'bottom-left':bottom_left}
 
     return props
+
+def shift_ccl(im, shift):
+    
+    c_top = ig.tools.get_cl_boundary(im, layer_to_keep='top')
+    n_slc, n_row, n_col = im.shape
+    
+    # layer by shifting image frame:
+    # cut the top and stitch to bottom
+    bottom_cut = c_top[shift:,:, :].copy()
+    bottom_append = np.zeros_like(im, shape=(shift, n_row, n_col))
+    
+    im_shifted = np.zeros_like(im)
+    im_shifted = np.concatenate((bottom_cut, bottom_append), axis=0, out=im_shifted)
+
+    return im_shifted
