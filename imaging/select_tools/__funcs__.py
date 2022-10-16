@@ -102,7 +102,7 @@ def get_imagej_rect_props(rect_spec):
 
     return props
 
-def shift_ccl(im, shift):
+def shift_ccl_top(im, shift):
     
     c_top = ig.tools.get_cl_boundary(im, layer_to_keep='top')
     n_slc, n_row, n_col = im.shape
@@ -114,5 +114,18 @@ def shift_ccl(im, shift):
     
     im_shifted = np.zeros_like(im)
     im_shifted = np.concatenate((bottom_cut, bottom_append), axis=0, out=im_shifted)
+
+    return im_shifted
+
+def shift_ccl(im, shift):
+
+    slc, row, col = np.where(im==255)
+    ccl_thickness = im.sum(axis=0) // 255
+
+    loc_thickness = ccl_thickness[row, col] # correspondind thickness for each row col pair
+    new_slc = slc - loc_thickness - shift - 1
+
+    im_shifted = np.zeros_like(im)
+    im_shifted[new_slc, row, col] = 255
 
     return im_shifted
