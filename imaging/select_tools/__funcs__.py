@@ -69,12 +69,12 @@ def rect_crop_2D(im, rect_spec):
 
     return im_crop
 
-def crop_from_centre(x, width):
+def crop_from_centre(x, width, height):
     
     mid_x = x.shape[1] // 2
     mid_y = x.shape[2] // 2 
     
-    crop = x[:, mid_x-(width//2):mid_x+(width//2), mid_y-(width//2):mid_y+(width//2)]
+    crop = x[:, mid_x-(height//2):mid_x+(height//2), mid_y-(width//2):mid_y+(width//2)]
     
     return crop
 

@@ -11,25 +11,32 @@ class ScribPol(PolCurve):
     def __init__(self, path, mea_active_area, cell_name=None, comment=None, n_skip_rows=None):
 
         path = os.path.normpath(path)
-        if n_skip_rows is None:
-            #n_skip_rows = 41
 
-            # TODO: refactor
-            try:
-                raw_data = pd.read_csv(path, sep='\t', skiprows=41)  # data hard to read without skiprows
-            except pd.errors.ParserError:
+        # check if it is a csv and read straight up
 
-                try:
-                    raw_data = pd.read_csv(path, sep='\t', skiprows=57)  # data hard to read without skiprows
-                except pd.errors.ParserError:
-                    raw_data = pd.read_csv(path, sep='\t', skiprows=59)
-
+        if path.endswith('.csv'):
+            raw_data = pd.read_csv(path, header=None)
         else:
-            raw_data = pd.read_csv(path, sep='\t', skiprows=n_skip_rows) 
+
+            if n_skip_rows is None:
+                #n_skip_rows = 41
+
+                # TODO: refactor
+                try:
+                    raw_data = pd.read_csv(path, sep='\t', skiprows=41)  # data hard to read without skiprows
+                except pd.errors.ParserError:
+
+                    try:
+                        raw_data = pd.read_csv(path, sep='\t', skiprows=57)  # data hard to read without skiprows
+                    except pd.errors.ParserError:
+                        raw_data = pd.read_csv(path, sep='\t', skiprows=59)
+
+            else:
+                raw_data = pd.read_csv(path, sep='\t', skiprows=n_skip_rows) 
 
 
 
-
+        # print(raw_data)
         data_part = raw_data.iloc[1:, [0, 1, 2, 5, 12, 13, 14, 17, 18]]
         data_part.columns = ['time', 'current', 'current_density', 'voltage', \
             'temp_cell', 'temp_anode', 'temp_cathode', 'rh_anode', 'rh_cathode']
