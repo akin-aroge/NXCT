@@ -447,7 +447,7 @@ def gauss_fit1D(data, n_comp=1, comps=[''], bins=50, n_sample=100, title='', ran
 
     return fig, ax, mus, stds, ws
 
-def get_cl_boundary(im, layer_to_keep='top', offset=0, connect=False):
+def  get_cl_boundary(im, layer_to_keep='top', offset=0, connect=False):
     """ im: segmented catalyst outline image"""
     
     #cl_outline_im = imread(os.path.join(cl_outline_im_path))
@@ -575,7 +575,7 @@ def gauss_filter(image, sigma):
     return sk.filters.gaussian(image, sigma, preserve_range=True)
 
 
-def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100)):
+def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100),  return_sc_field=None):
     """
     Corrects illumination across the stack of radiographs for quantitative information.
     The algorithm uses a reference patch which gives a sort of basis vector. 
@@ -618,10 +618,14 @@ def correct_illum(im, sigma=10, ref_region_spec=(15, 747, 100)):
     im_corrected = im - im_correction
     del im_correction
 
-    return np.float32(im_corrected)#, im_scale_field
+    if return_sc_field:
+        return im_corrected, im_scale_field
+    else:
+
+        return im_corrected#, im_scale_field
 
 
-def correct_illum_m2(im, sigma=5, ref_region_spec=(15, 747, 100)):
+def correct_illum_m2(im, sigma=5, ref_region_spec=(15, 747, 100), return_sc_field=None):
     #im_G = np.zeros_like(im)
 #     for i, slc in enumerate(im):
 
@@ -655,10 +659,14 @@ def correct_illum_m2(im, sigma=5, ref_region_spec=(15, 747, 100)):
     #im_corrected = im - im_correction + im[0]  # this one takes the image to typical values
     im_corrected = im - im_correction
     
-    return im_corrected#, im_scale_field
+    if return_sc_field:
+        return im_corrected, im_scale_field
+    else:
+
+        return im_corrected#, im_scale_field
 
 
-def correct_illum_m3(im, sigma=250, ref_region_spec=(15, 747, 100)):
+def correct_illum_m3(im, sigma=250, ref_region_spec=(15, 747, 100), return_sc_field=None):
     #im_G = np.zeros_like(im)
 #     for i, slc in enumerate(im):
 
@@ -702,7 +710,11 @@ def correct_illum_m3(im, sigma=250, ref_region_spec=(15, 747, 100)):
     # the corrected image will be the raw image with the cumulative sum removed
     im_corrected = im - np.cumsum(im_correction_delta, axis=0)
     
-    return im_corrected #, im_scale_field
+    if return_sc_field:
+        return im_corrected, im_scale_field
+    else:
+
+        return im_corrected#, im_scale_field
 
 
 
