@@ -1,3 +1,4 @@
 {
-    "python.pythonPath": "C:\\Users\\Aroge\\anaconda3\\envs\\phd_work\\python.exe"
+    "python.pythonPath": "C:\\Users\\Aroge\\anaconda3\\python.exe",
+    "files.autoSave": "onFocusChange"
 }

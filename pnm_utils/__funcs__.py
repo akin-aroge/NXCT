@@ -1,6 +1,70 @@
 import numpy as np
 import skimage as sk
+import openpnm as op
+import porespy as ps
+import openpnm as op
 
+
+def get_diffusivity(phase, area, length, proj):
+
+    phase = proj.phases()[phase]
+
+    fd = op.algorithms.FickianDiffusion(project=proj)
+    fd.setup(phase=phase)
+    pn = proj.network
+    inlets = pn.pores('left')
+    outlets = pn.pores('right')
+    fd.set_value_BC(pores=inlets, values=1)
+    fd.set_value_BC(pores=outlets, values=0.5)
+
+    print('simulating fickian diffusion through the pore network...')
+    fd.run()
+    
+    return fd.calc_effective_diffusivity(inlets=inlets, outlets=outlets, domain_area=area, domain_length=length)[0]
+
+def get_tomo_diffusivity(im_data, pore_phase_value, pixel_size):
+
+    im = np.where(im_data==pore_phase_value, 1, 0)  # set pore phase value to 1
+    im = np.array(im, dtype=bool) 
+    
+    # setup workspace        
+    ws = op.Workspace()
+    ws.settings["loglevel"] = 50
+    ws.clear()
+    proj = ws.new_project(name='proj')
+
+    # extract network
+    net = ps.networks.snow(im=im, voxel_size=pixel_size)
+    op.io.PoreSpy.import_data(net, project=proj)
+
+    # trim pores
+    pore_health = proj.network.check_network_health()
+    op.topotools.trim(network=proj.network, pores=pore_health['trim_pores'])
+
+    # setup phase and physics
+    air = op.phases.Air(project=proj, name='air')
+
+    geo = proj.geometries()['geo_01']
+    phy_air = op.physics.Standard(phase=air, geometry=geo, project=proj, name='phy_air')
+
+    #use purcell model for pore entry pressure
+    fiber_rad = 5e-6
+    throat_diam = 'throat.diameter'
+    pore_diam = 'pore.indiameter'
+    pmod = op.models.physics.capillary_pressure.purcell
+    phy_air.add_model(propname='throat.entry_pressure',
+                        model=pmod,
+                        r_toroid=fiber_rad,
+                        diameter=throat_diam)
+
+    # simulate Fickian diffusion
+    shape = np.array(im.shape)
+    area = shape[[1, 2]].prod() * (pixel_size**2)
+    length = shape[0] * pixel_size
+
+    diff = get_diffusivity(phase='air', area=area, length=length, proj=proj)
+
+    return diff
 
 def get_break_vals(alg_obj, return_sat=True):
     
