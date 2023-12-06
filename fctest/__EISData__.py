@@ -16,18 +16,21 @@ class EISData:
         self.mea_area = mea_area
         # todo: other parameters
 
-    def plot_nyquist(self, label=None, unflip_im_axis=None, return_axis=None, ax=None, asr=None):
+    def plot_nyquist(self, label=None, n_pts=None, unflip_im_axis=None, return_axis=None, ax=None, asr=None):
         
         z_im = self.z_im
         z_re = self.z_re
         
+        if n_pts is not None:
+            z_im = z_im[:n_pts]
+            z_re = z_re[:n_pts]
         
         if ax is None:
             #fig, ax = plt.subplots()
             ax = plt.gca()
             
         if asr is None or asr == True:
-            z_re = self.z_re * self.mea_area
+            z_re = z_re * self.mea_area
             z_im = z_im * self.mea_area
             
             

@@ -19,3 +19,6 @@ class CVData:
         if return_axes is not None and return_axes == True:
             plt.close()
             return ax
+    
+    def get_cdl(self, volt_range=(0.35, 0.65)):
+        raise NotImplementedError

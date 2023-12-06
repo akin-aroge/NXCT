@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib_scalebar.scalebar import ScaleBar
 import skimage.io as io
 import skimage.filters as flt
 #%matplotlib inline
@@ -20,6 +21,21 @@ from skimage.io import imread, imsave
 import skimage as sk
 import os
 
+
+def plot_im_map(im_val, px_val, cmap='jet'):
+
+
+    fig, ax = plt.subplots()
+    p = ax.imshow(im_val, cmap=cmap)
+    ax.axis('off')
+    font_dict = {'size': 25}
+    ax.add_artist(ScaleBar(dx=px_val, units='um', fixed_value=500, font_properties=font_dict,
+                        fixed_units='um',  color='black'))
+
+    plt.colorbar(p, label='Thickness [$\mu m$]')
+    fig = plt.gcf()
+
+    return fig
 
 def anisodiff(img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1,ploton=False):
     """
@@ -405,7 +421,7 @@ def gaussian(x, mu, var):
     return (1/(sig * (2*np.pi)**(1/2))) * np.exp(-(1/2) * ((x - mu)/sig)**2)
     #return np.exp(-(1/2) * ((x - mu)/sig)**2)
 
-def gauss_fit1D(data, n_comp=1, comps=[''], bins=50, n_sample=100, title='', rand_state=42):
+def gauss_fit1D(data, n_comp=1, comps=[''], bins=50, n_sample=100, title='', fit_total_density=False, rand_state=42):
     """ gets intensity points and number of components and 
     plots an approximate gaussian fit of the different components"""
 
@@ -425,9 +441,7 @@ def gauss_fit1D(data, n_comp=1, comps=[''], bins=50, n_sample=100, title='', ran
         g_hat = gaussian(x_vals, mus[i], vars_[i])
         g_hats[:, i] = g_hat
 
-    # sum gaussians
 
-    g_hats_total = np.dot(g_hats, ws)
 
     fig, ax = plt.subplots(figsize=(12, 8))
 
@@ -437,10 +451,12 @@ def gauss_fit1D(data, n_comp=1, comps=[''], bins=50, n_sample=100, title='', ran
         ax.plot(x_vals, ws[comp] * g_hats[:, comp], label="mu = %.2f,  std = %.2f, %s" % \
                 (mus[comp], stds[comp], comps[comp]))
 
+    # sum gaussians
+    if fit_total_density:
+        g_hats_total = np.dot(g_hats, ws)
+        ax.plot(x_vals, g_hats_total, label='fit')
 
-    ax.plot(x_vals, g_hats_total, label='fit')
-
-    ax.set_xlabel('Grey scale value')
+    ax.set_xlabel('')
     ax.set_ylabel('density')
     ax.set_title(title, fontsize=19)
     ax.legend()

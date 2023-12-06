@@ -24,6 +24,8 @@ def get_diffusivity(phase, area, length, proj):
 
 def get_tomo_diffusivity(im_data, pore_phase_value, pixel_size):
 
+    """Compute the effective diffusivity of a pore structure given 3D image dataset."""
+
     im = np.where(im_data==pore_phase_value, 1, 0)  # set pore phase value to 1
     im = np.array(im, dtype=bool) 
     

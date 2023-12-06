@@ -3,6 +3,38 @@ import numpy as np
 import skimage as sk
 
 
+def ccm_thickness(im_cl_seg, px_val):
+
+
+    def cl_seg_thk(im_cl_seg, px_val):
+        """calculates the CCM thickness from the segmented
+        anode and cathode catalyst layer.
+        """
+
+        top = np.argmax(im_cl_seg, axis=0)
+        n_z = im_cl_seg.shape[0]
+        bot = n_z - 1 - np.argmax(im_cl_seg[::-1], axis=0)
+
+        t = bot - top
+        filter_ = t < (n_z-1)
+        t_vals = t[filter_]
+
+        t_map = t.copy()
+        t_map[~filter_] = 0
+
+        t_map = t_map * px_val
+        t_vals = t_vals * px_val
+        return t_vals, t_map
+    
+    t_vals, t_map = cl_seg_thk(im_cl_seg=im_cl_seg, px_val=px_val)
+
+    t_vals = np.expand_dims(t_vals, axis=1)
+    fig, ax, mus, stds, ws = ig.tools.gauss_fit1D(data=t_vals, n_comp=2, comps=['a', 'b'] )
+    thk_mean = np.max(mus)
+    idx_max_mean = np.argmax(mus)
+    thk_std = stds[idx_max_mean]
+
+    return thk_mean, thk_std, t_map
 
 def calc_mem_thk(acl_seg, ccl_seg, px_val):
     
