@@ -2,25 +2,130 @@ import numpy as np
 import skimage as sk
 import openpnm as op
 import porespy as ps
-import openpnm as op
+import matplotlib.pyplot as plt
+# import openpnm as op
 
+def compute_psd(im, pixel_size):
 
-def get_diffusivity(phase, area, length, proj):
+    # setup workspace
+        
+    ws = op.Workspace()
+    ws.settings["loglevel"] = 50
+    ws.clear()
+    proj = ws.new_project(name='proj')
 
+    # extract network
+    net = ps.networks.snow(im=im, voxel_size=pixel_size)
+    op.io.PoreSpy.import_data(net, project=proj)
+
+    # trim pores
+    pore_health = proj.network.check_network_health()
+    op.topotools.trim(network=proj.network, pores=pore_health['trim_pores'])
+
+    fig, ax = plt.subplots()
+    ax.hist(net['pore.diameter'],  bins=40, alpha=0.7,edgecolor='k', density=True, label='channel')
+    ax.set_xlabel('pore diameter ($\mu m$)')
+    ax.set_ylabel('proportion')
+    
+    return net['pore.diameter']
+
+def run_percolation(project, inlet='left', outlet='right', inv_phase='water', phase_theta=110, invasion=False, n_pts=100):
+
+    if isinstance(inlet, str):
+        pn = project.network
+        inlets = pn.pores(inlet)
+        outlets = pn.pores(outlet)
+    else:
+        inlets = inlet
+        outlets = outlet
+
+    if invasion:
+        net = project.network
+        OP = op.algorithms.InvasionPercolation(network=net)
+    else:
+        OP = op.algorithms.OrdinaryPercolation(project=project)
+
+    phase = project.phases()[inv_phase]
+    phase['pore.contact_angle'] = phase_theta
+    phase.regenerate_models(deep=True)
+
+    if invasion:
+        OP.setup(phase=phase, pore_volume='pore.volume', throat_volume='throat.volume')
+    else:
+        OP.setup(phase=phase, pore_volume='pore.volume', throat_volume='throat.volume', access_limited=True)
+   
+    OP.set_inlets(pores=inlets)
+    if not invasion:
+        OP.set_outlets(pores=outlets)
+
+    if not invasion:
+        OP.run(points=n_pts)
+    else:
+        OP.run()
+
+    return OP
+
+def plot_cap_curve(perc_obj:op.algorithms.OrdinaryPercolation, ax=None, marker=None, show_break_line=False, label=None):
+
+    p_break, sat_break = get_break_vals(perc_obj, return_sat=True)
+    pc, sat = perc_obj.get_intrusion_data()
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    if marker is None:
+        marker = '-'
+    ax.plot(pc/1000, sat, marker, label=label)
+    ax.grid()
+
+    ax.set_xlabel('pressure (kPa)')
+    ax.set_ylabel('invading phase saturation')
+    ax.set_xlim(0, 25)
+    if show_break_line:
+        ax.axvline(x=p_break/1000, ymin=0, ymax=1.0, ls='--', c='r', label='break-pressure')
+
+    ax.legend()
+
+def get_diffusivity(phase:str, area, length, proj, conductance_model='throat.conduit_diffusive_conductance', boundaries=None):
+    
+    if boundaries is None:
+        boundaries = ('left', 'right')
+    
+    in_ = boundaries[0]
+    out_ = boundaries[1]
     phase = proj.phases()[phase]
 
     fd = op.algorithms.FickianDiffusion(project=proj)
-    fd.setup(phase=phase)
+    fd.setup(phase=phase, conductance=conductance_model)
     pn = proj.network
-    inlets = pn.pores('left')
-    outlets = pn.pores('right')
+    inlets = pn.pores(in_)
+    outlets = pn.pores(out_)
     fd.set_value_BC(pores=inlets, values=1)
     fd.set_value_BC(pores=outlets, values=0.5)
 
-    print('simulating fickian diffusion through the pore network...')
+    # print('simulating fickian diffusion through the pore network...')
     fd.run()
+    diff = fd.calc_effective_diffusivity(inlets=inlets, outlets=outlets, domain_area=area, domain_length=length)
+    # print(diff)
     
-    return fd.calc_effective_diffusivity(inlets=inlets, outlets=outlets, domain_area=area, domain_length=length)[0]
+    return diff[0] 
+
+# def get_diffusivity(phase, area, length, proj):
+
+#     phase = proj.phases()[phase]
+
+#     fd = op.algorithms.FickianDiffusion(project=proj)
+#     fd.setup(phase=phase)
+#     pn = proj.network
+#     inlets = pn.pores('left')
+#     outlets = pn.pores('right')
+#     fd.set_value_BC(pores=inlets, values=1)
+#     fd.set_value_BC(pores=outlets, values=0.5)
+
+#     print('simulating fickian diffusion through the pore network...')
+#     fd.run()
+    
+#     return fd.calc_effective_diffusivity(inlets=inlets, outlets=outlets, domain_area=area, domain_length=length)[0]
 
 def get_tomo_diffusivity(im_data, pore_phase_value, pixel_size):
 
@@ -68,15 +173,72 @@ def get_tomo_diffusivity(im_data, pore_phase_value, pixel_size):
 
     return diff
 
+def update_cap_sat_state(in_phase, def_phase, proj, sat_pt=None, pc_point=None, OP=None,  percolation_type=None, sim_sat=True):
+    
+    if sim_sat:
+        if percolation_type == 'invasion':
+            occupancy = OP.results(sat_pt)
+        else:
+            occupancy = OP.results(pc_point)
+            
+        in_phase['pore.occupancy'] = occupancy['pore.occupancy']
+        in_phase['throat.occupancy'] = occupancy['throat.occupancy']
+
+        def_phase['pore.occupancy'] = 1-occupancy['pore.occupancy']
+        def_phase['throat.occupancy'] = 1-occupancy['throat.occupancy']
+    else:
+        p_occupancy = np.zeros(len(proj.network.pores()))
+        t_occupancy = np.zeros(len(proj.network.throats()))
+
+        in_phase['pore.occupancy'] = p_occupancy
+        in_phase['throat.occupancy'] = t_occupancy
+
+        def_phase['pore.occupancy'] = 1-p_occupancy
+        def_phase['throat.occupancy'] = 1-t_occupancy
+
+    mode = 'strict'
+    
+    phy_air = proj.physics()['phy_air']
+    phy_water = proj.physics()['phy_water']
+    
+    phy_air.add_model(model=op.models.physics.multiphase.conduit_conductance,
+                       propname='throat.conduit_diffusive_conductance',
+                       throat_conductance='throat.diffusive_conductance',
+                       mode=mode, factor=1e-3)
+    
+    phy_air.add_model(model=op.models.physics.multiphase.conduit_conductance,
+                       propname='throat.conduit_hydraulic_conductance',
+                       throat_conductance='throat.hydraulic_conductance',
+                       mode=mode, factor=1e-3)
+    
+    phy_water.add_model(model=op.models.physics.multiphase.conduit_conductance,
+                         propname='throat.conduit_diffusive_conductance',
+                         throat_conductance='throat.diffusive_conductance',
+                         mode=mode, factor=1e-3)
+    
+    phy_water.add_model(model=op.models.physics.multiphase.conduit_conductance,
+                     propname='throat.conduit_hydraulic_conductance',
+                     throat_conductance='throat.hydraulic_conductance',
+                     mode=mode, factor=1e-3)
+    
+    props = ['throat.conduit_diffusive_conductance', 'throat.conduit_hydraulic_conductance']
+    phy_air.regenerate_models(propnames=props)
+    phy_water.regenerate_models(propnames=props)
+
+
 def get_break_vals(alg_obj, return_sat=True):
     
     pcap, sat = alg_obj.get_intrusion_data()
 
+
     for i, p in enumerate(pcap):
-        if alg_obj.is_percolating(p):
-            p_break = p
-            sat_break = sat[i]
-            break
+        try:
+            if alg_obj.is_percolating(p):
+                p_break = p
+                sat_break = sat[i]
+                break
+        except AttributeError:
+            return None, None
 
     return p_break, sat_break
 
@@ -191,13 +353,13 @@ def get_cylinder_spatial_h(top_left_loc, bot_right_loc, diam):
 
 
 
-def sample_cap(OP, sat_step, percolation_type=None ):
+def sample_cap(OP, sat_step, is_invasion=False ):
     
     # get saturation steps
     data = OP.get_intrusion_data()
     
     # check the type of percolation whether invasion or ordinary
-    if percolation_type == 'invasion':
+    if is_invasion:
         sat_pts = [data.S_tot[0]]; pc_points = [data.Pcap[0]]  # initialize with first points
         
         

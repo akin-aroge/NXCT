@@ -1,12 +1,13 @@
 from fctest.__EISData__ import EISData
 import pandas as pd
 import os
+import warnings
 
 class G20EISData(EISData):
 
     ENCODING = "ISO-8859-1"
     
-    def __init__(self, data_path):
+    def __init__(self, data_path, mea_area=None, cell_name=None):
 
         path = os.path.normpath(data_path)
         raw_data = pd.read_csv(path, sep='\t', encoding=self.ENCODING)
@@ -18,7 +19,10 @@ class G20EISData(EISData):
         data_section.columns = col_names
 
         test_date = pd.to_datetime(raw_data.iloc[2, 2] + ' ' + raw_data.iloc[3, 2])
-        mea_area = float(raw_data.iloc[12, 2])
+        mea_area_from_file = float(raw_data.iloc[12, 2])
+        if mea_area_from_file != mea_area:
+            warnings.warn(f"file area is {mea_area_from_file}, while specified mea area is {mea_area}")
+            
         initial_freq = float(raw_data.iloc[8, 2])
         final_freq = float(raw_data.iloc[9, 2])
         pts_per_decade = float(raw_data.iloc[10, 2])
@@ -39,6 +43,7 @@ class G20EISData(EISData):
         self.final_freq = final_freq
         self.points_per_decade = pts_per_decade
         self.file_name = os.path.basename(data_path)
+        self.cell_name = cell_name
 
 
 

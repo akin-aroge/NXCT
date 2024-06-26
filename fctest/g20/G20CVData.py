@@ -25,8 +25,8 @@ class G20CVData(CVData):
         data_section = raw_data.iloc[65:, :]
         data_section.columns = col_names
 
-        v_vs_ref = pd.to_numeric(data_section['Vf'].values)
-        im = pd.to_numeric(data_section['Im'].values)
+        v_vs_ref = pd.to_numeric(data_section['Vf'])
+        im = pd.to_numeric(data_section['Im'])
 
         super().__init__(potential=v_vs_ref, current=im)
 
