@@ -96,7 +96,7 @@ def get_diffusivity(phase:str, area, length, proj, conductance_model='throat.con
     phase = proj.phases()[phase]
 
     fd = op.algorithms.FickianDiffusion(project=proj)
-    fd.setup(phase=phase, conductance=conductance_model)
+    fd.setup(phase=phase)
     pn = proj.network
     inlets = pn.pores(in_)
     outlets = pn.pores(out_)
